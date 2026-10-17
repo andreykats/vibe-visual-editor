@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # The release workflow runs this as its test gate.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - name: Unit, plugin and MCP tests
+        run: npm test
+      - run: npx playwright install --with-deps chromium
+      - name: Page client tests
+        run: npm run test:e2e
+      - name: VS Code extension tests
+        # VS Code needs a display; xvfb provides one on the headless runner.
+        run: xvfb-run -a npm run test:extension

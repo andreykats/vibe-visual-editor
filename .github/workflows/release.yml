@@ -1,0 +1,91 @@
+name: Release
+
+# Push a tag to release one package:
+#   extension-vX.Y.Z    -> VS Code Marketplace
+#   vite-plugin-vX.Y.Z  -> npm
+# Both publish through trusted publishing (GitHub OIDC), so no tokens are stored.
+# The trusted publishers on the Marketplace and npm name this file, release.yml.
+on:
+  push:
+    tags: ['extension-v*', 'vite-plugin-v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      package: ${{ steps.tag.outputs.package }}
+      version: ${{ steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - id: tag
+        run: node scripts/release-tag.mjs "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+  test:
+    needs: check
+    uses: ./.github/workflows/ci.yml
+
+  extension:
+    needs: [check, test]
+    if: needs.check.outputs.package == 'extension'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # GitHub Release
+      id-token: write # Marketplace trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Package
+        run: npm run package
+      - name: Publish to the Marketplace
+        working-directory: packages/extension
+        run: npx vsce publish --oidc --packagePath vibe-visual-editor.vsix
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          node scripts/changelog-section.mjs "$VERSION" > notes.md
+          gh release create "$GITHUB_REF_NAME" packages/extension/vibe-visual-editor.vsix \
+            --title "Extension $VERSION" --notes-file notes.md
+
+  vite-plugin:
+    needs: [check, test]
+    if: needs.check.outputs.package == 'vite-plugin'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # GitHub Release
+      id-token: write # npm trusted publishing, and provenance
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+      - name: npm with trusted publishing
+        # Trusted publishing needs npm 11.5.1 or later; Node 22 ships npm 10.
+        run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - name: Publish to npm
+        # prepublishOnly builds the package. Provenance is added automatically.
+        run: npm publish -w @vibe-visual-editor/vite-plugin
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "Vite plugin $VERSION" \
+            --notes "Published to npm as [@vibe-visual-editor/vite-plugin@$VERSION](https://www.npmjs.com/package/@vibe-visual-editor/vite-plugin/v/$VERSION)."

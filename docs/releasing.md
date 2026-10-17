@@ -13,32 +13,53 @@ The two packages are versioned independently. They talk to each other over a wir
 
 Versions can't be reused on either registry, even after deleting a release.
 
-## Checklist
+## Releasing a version
 
-1. Run all four suites: `npm run typecheck`, `npm test`, `npm run test:e2e` and `npm run test:extension`.
-2. Bump `version` in the package's `package.json`, and add an entry to `packages/extension/CHANGELOG.md` for an extension release.
-3. Commit, and tag the release as `extension-vX.Y.Z` or `vite-plugin-vX.Y.Z`.
+Releases run in GitHub Actions ([`release.yml`](../.github/workflows/release.yml)) when you push a tag.
 
-## Extension
+1. Bump `version` in the package's `package.json`.
+   - **Extension:** also add a `## X.Y.Z` section to `packages/extension/CHANGELOG.md`. It becomes the GitHub Release notes, and the release fails without it.
+2. Commit and push to `main`, and wait for CI to pass.
+3. Tag the commit and push the tag:
 
-```sh
-npm run package   # builds through vscode:prepublish and writes packages/extension/vibe-visual-editor.vsix
-```
+   ```sh
+   git tag extension-v0.1.1     # or vite-plugin-v0.1.1
+   git push origin extension-v0.1.1
+   ```
 
-Upload the `.vsix` at https://marketplace.visualstudio.com/manage. That needs only your Microsoft account, no token.
+The workflow then:
 
-To publish from CI later, use Microsoft Entra workload identity with `vsce publish --azure-credential` (vsce 2.26.1 or later). Global Azure DevOps personal access tokens are retired on 1 December 2026. See [Publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension).
+1. checks that the tag matches the package version (`scripts/release-tag.mjs`)
+2. runs the full test suite (`ci.yml`)
+3. publishes:
+   - the extension with `vsce publish --oidc`
+   - the plugin with `npm publish` (provenance is added automatically)
+4. creates a GitHub Release. Extension releases have the `.vsix` attached.
 
-The manifest sets `"preview": true`, which shows a Preview badge on the listing. Remove it at 1.0.
+Both registries use **trusted publishing**: GitHub Actions proves which repository and workflow is publishing, and no token is stored anywhere.
 
-## Vite plugin
+## One-time setup
 
-```sh
-npm login
-npm publish -w @vibe-visual-editor/vite-plugin   # builds through prepublishOnly; publishConfig makes it public
-```
+Trusted publishing is configured on each registry and names this repository and workflow:
 
-The `@vibe-visual-editor` scope belongs to the npm organization of the same name.
+| Field | Value |
+|---|---|
+| Owner | `andreykats` |
+| Repository | `vibe-visual-editor` |
+| Workflow | `release.yml` |
+| Environment | (none) |
+
+- **npm:** on https://www.npmjs.com/package/@vibe-visual-editor/vite-plugin, go to **Settings → Trusted Publisher → GitHub Actions** and enter the values above. Once a CI publish has worked, set **Publishing access** to "Require two-factor authentication and disallow tokens". Trusted publishing keeps working after that. See [npm: trusted publishers](https://docs.npmjs.com/trusted-publishers).
+- **Marketplace:** on https://marketplace.visualstudio.com/manage, add a trusted publishing policy for the `andreykats` publisher with the values above. See the "Trusted publishing" section of the [vsce README](https://github.com/microsoft/vscode-vsce#trusted-publishing).
+
+If the Marketplace policy isn't available to your publisher, the supported alternative is Microsoft Entra workload identity. Log in with `azure/login@v3` and a user-assigned managed identity that is a Contributor on the publisher, then run `vsce publish --azure-credential`. See [Publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension). Azure DevOps personal access tokens are retired on 1 December 2026.
+
+## Manual fallback
+
+- **Extension:** run `npm run package` and upload `packages/extension/vibe-visual-editor.vsix` at https://marketplace.visualstudio.com/manage.
+- **Plugin:** run `npm publish -w @vibe-visual-editor/vite-plugin` in a terminal. It asks you to approve in the browser (two-factor). npm only offers the browser approval in an interactive terminal.
+
+The manifest sets `"preview": true`, which shows a Preview badge on the Marketplace listing. Remove it at 1.0.
 
 ## Icon
 
