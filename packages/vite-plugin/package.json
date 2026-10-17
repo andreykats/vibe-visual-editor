@@ -1,6 +1,6 @@
 {
   "name": "@vibe-visual-editor/vite-plugin",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dev-only Vite plugin for Vibe Visual Editor: maps rendered text back to the string literals in your source, so the VS Code preview can edit it in place.",
   "keywords": [
     "vite",
