@@ -1,0 +1,15 @@
+# Milestone 0 spikes (2026-10-16)
+
+| # | Question | Result | How it was checked |
+|---|---|---|---|
+| 1 | Is a `vscode://andreykats.vibe-visual-editor/open?...` link printed in chat clickable in the Claude Code VS Code panel, the Claude Code terminal, and the Codex VS Code panel? | **Not yet checked.** It needs someone to click it in each surface. Until then, the `open_preview` MCP tool is the main route and the link is secondary. | Manual |
+| 2 | Do the agents start stdio MCP servers with `cwd` set to the project directory? | **Yes, for both.** `claude -p` and `codex exec`, run from `/tmp/le-spike/project/sub`, started the probe server with `cwd` set to that directory. Claude Code also sets `CLAUDE_PROJECT_DIR`. Codex passes almost no environment through, so routing relies on `process.cwd()` only. The IDE panels weren't probed separately, so check them during manual acceptance. | A probe MCP server logged `process.cwd()`. It was registered per invocation (`--mcp-config` for Claude, `-c mcp_servers.probe.*` for Codex), so no user config was changed. |
+| 3 | Can a cross-origin iframe inside a webview keep Vite's HMR WebSocket open? | **Yes.** In VS Code 1.142, writing a source file made the page in the preview reload, and the handshake completed again. | Extension integration test "HMR reaches the iframe" |
+| 4 | What does Cmd+S do when focus is inside the iframe? | Key events in the cross-origin iframe never reach VS Code's keybindings, so the page client forwards Cmd/Ctrl+S, Cmd/Ctrl+Z and Shift+Cmd/Ctrl+Z as `le:key` and calls `preventDefault`. When focus is on the toolbar, the extension's `activeWebviewPanelId == 'vibeVisualEditor.preview'` keybindings handle them. Forwarding is covered by a Playwright test. Behavior in a real VS Code window still needs a manual check. | Playwright test plus manual check |
+
+## Other findings
+
+- **Origin of the webview's ack.** In desktop VS Code the webview's origin is `vscode-webview://<id>`. The page client accepts `le:ack` only from that origin pattern (or `*.vscode-cdn.net` for VS Code for the Web) and pins every later message to it. A site that frames the dev server therefore gets nothing beyond `le:hello`. The extension marks the preview connected only after the page replies `le:ready`.
+- **Discard and dirty state.** Restoring a literal's original text with a `WorkspaceEdit` leaves the document dirty even when it matches the file on disk again. `workbench.action.files.revert` acts only on the active editor and ignores a URI argument. Saving identical text could trigger format-on-save. So Discard restores the text exactly and leaves the dirty marker; this is documented in `setup.md`.
+- **`preventDefault` on `mousedown` blocks iframe focus.** Swallowed clicks in Edit and Select modes would otherwise leave keyboard focus outside the page, and Esc and Cmd+S would never arrive. The client calls `window.focus()` on swallowed pointerdowns.
+- **zod size.** `import { z } from 'zod'` pulls in every locale (about 450 KB in the page client). Switching the protocol to `import * as z from 'zod/mini'` brought the client down to 50 KB.

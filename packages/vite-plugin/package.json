@@ -1,0 +1,63 @@
+{
+  "name": "@vibe-visual-editor/vite-plugin",
+  "version": "0.1.0",
+  "description": "Dev-only Vite plugin for Vibe Visual Editor: maps rendered text back to the string literals in your source, so the VS Code preview can edit it in place.",
+  "keywords": [
+    "vite",
+    "vite-plugin",
+    "visual editor",
+    "live edit",
+    "vscode",
+    "claude code",
+    "codex",
+    "mcp"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Andrey Kats"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreykats/vibe-visual-editor.git",
+    "directory": "packages/vite-plugin"
+  },
+  "bugs": {
+    "url": "https://github.com/andreykats/vibe-visual-editor/issues"
+  },
+  "homepage": "https://github.com/andreykats/vibe-visual-editor#readme",
+  "type": "module",
+  "exports": {
+    ".": {
+      "vibe-visual-editor:source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "magic-string": "^1.4.3",
+    "oxc-parser": "^0.154.0"
+  },
+  "peerDependencies": {
+    "vite": ">=7"
+  },
+  "devDependencies": {
+    "@vibe-visual-editor/protocol": "0.1.0",
+    "esbuild": "^0.28.2",
+    "rolldown": "^1.2.14",
+    "rolldown-plugin-dts": "^0.28.8",
+    "vite": "^8.3.4"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepublishOnly": "node scripts/build.mjs"
+  }
+}

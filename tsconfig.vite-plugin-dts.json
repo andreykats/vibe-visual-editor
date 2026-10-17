@@ -1,0 +1,16 @@
+{
+  // Declaration build for packages/vite-plugin (see its scripts/build.mjs). It lives
+  // here because rolldown-plugin-dts uses this file's directory as rootDir, which must
+  // contain the protocol sources that get inlined; tsc writes files outside rootDir
+  // next to their sources.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    // Reached through node_modules, tsc would treat protocol as a library and not
+    // emit its declarations.
+    "paths": { "@vibe-visual-editor/protocol": ["./packages/protocol/src/index.ts"] }
+  },
+  "include": ["packages/vite-plugin/src/index.ts"]
+}

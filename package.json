@@ -1,0 +1,27 @@
+{
+  "name": "vibe-visual-editor-monorepo",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/protocol",
+    "packages/vite-plugin",
+    "packages/mcp-bridge",
+    "packages/extension",
+    "fixtures/h-app"
+  ],
+  "scripts": {
+    "build": "npm run build -w @vibe-visual-editor/vite-plugin -w vibe-visual-editor",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "npm run build && vitest run",
+    "test:e2e": "npm run build -w @vibe-visual-editor/vite-plugin && playwright test",
+    "test:extension": "npm run test -w vibe-visual-editor",
+    "package": "npm run package -w vibe-visual-editor"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^22.20.5",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}

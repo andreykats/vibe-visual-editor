@@ -1,0 +1,282 @@
+import assert from 'node:assert/strict';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import * as vscode from 'vscode';
+import type { Candidate, ResolveResponse, WindowEntry } from '@vibe-visual-editor/protocol';
+import type { VibeVisualEditorApi } from '../../src/extension';
+import type { PreviewPanel } from '../../src/previewPanel';
+
+const DEV_URL = process.env.VIBE_VISUAL_EDITOR_TEST_DEV_URL!;
+const WORKSPACE = process.env.VIBE_VISUAL_EDITOR_TEST_WORKSPACE!;
+const HOME = process.env.VIBE_VISUAL_EDITOR_HOME!;
+const DEV_ORIGIN = new URL(DEV_URL).origin;
+
+const tests: { name: string; fn: () => Promise<void> }[] = [];
+const test = (name: string, fn: () => Promise<void>) => tests.push({ name, fn });
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function until<T>(what: string, fn: () => T | Promise<T>, timeoutMs = 15_000): Promise<NonNullable<T>> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const v = await fn();
+    if (v) return v as NonNullable<T>;
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}`);
+    await sleep(100);
+  }
+}
+
+const file = (rel: string) => path.join(WORKSPACE, rel);
+const disk = (rel: string) => readFileSync(file(rel), 'utf8');
+
+async function resolve(text: string): Promise<Candidate> {
+  const res = await fetch(`${DEV_ORIGIN}/__vibe-visual-editor/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  const body = (await res.json()) as ResolveResponse;
+  assert.equal(body.candidates.length, 1, `expected one candidate for ${text}`);
+  return body.candidates[0]!;
+}
+
+async function doc(rel: string): Promise<vscode.TextDocument> {
+  return vscode.workspace.openTextDocument(vscode.Uri.file(file(rel)));
+}
+
+/** Puts a file back to its on-disk content and clears its dirty state. */
+async function revert(rel: string): Promise<void> {
+  const d = await doc(rel);
+  if (!d.isDirty) return;
+  await vscode.window.showTextDocument(d);
+  await vscode.commands.executeCommand('workbench.action.files.revert');
+  await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+}
+
+let api: VibeVisualEditorApi;
+let panel: PreviewPanel;
+
+test('activates and registers this window in the bridge registry', async () => {
+  const ext = vscode.extensions.getExtension<VibeVisualEditorApi>('andreykats.vibe-visual-editor');
+  assert.ok(ext, 'extension present');
+  api = await ext.activate();
+  const entryFile = path.join(HOME, 'windows', `${process.pid}.json`);
+  await until('registry file', () => {
+    try {
+      return statSync(entryFile);
+    } catch {
+      return null;
+    }
+  });
+  assert.equal(statSync(entryFile).mode & 0o777, 0o600);
+  const entry = JSON.parse(readFileSync(entryFile, 'utf8')) as WindowEntry;
+  assert.deepEqual(entry.workspaceFolders, [WORKSPACE]);
+  assert.equal(statSync(path.join(HOME, 'bin', 'vibe-visual-editor-mcp.mjs')).isFile(), true);
+});
+
+test('URI handler rejects non-loopback URLs and unknown modes', async () => {
+  for (const bad of ['http://example.com:5173/', 'file:///etc/passwd', 'http://localhost.evil.com/']) {
+    const uri = vscode.Uri.parse(`${vscode.env.uriScheme}://andreykats.vibe-visual-editor/open?url=${encodeURIComponent(bad)}`);
+    assert.equal(await api.handleUri(uri), undefined, bad);
+  }
+  const badMode = vscode.Uri.parse(`${vscode.env.uriScheme}://andreykats.vibe-visual-editor/open?url=${encodeURIComponent(DEV_URL)}&mode=paint`);
+  assert.equal(await api.handleUri(badMode), undefined);
+  assert.equal(api.previews.all().length, 0);
+});
+
+test('URI handler opens the preview, and the page client connects inside the webview', async () => {
+  const uri = vscode.Uri.parse(`${vscode.env.uriScheme}://andreykats.vibe-visual-editor/open?url=${encodeURIComponent(DEV_URL)}&mode=select`);
+  const opened = await api.handleUri(uri);
+  assert.ok(opened);
+  panel = opened;
+  await until('page hello', () => panel.status === 'connected', 30_000);
+  assert.equal(panel.mode, 'select');
+  assert.equal(panel.url, DEV_URL);
+});
+
+test('HMR reaches the iframe: saving a file reloads the page', async () => {
+  const before = panel.helloCount;
+  const rel = 'src/strings.ts';
+  const original = disk(rel);
+  writeFileSync(file(rel), `${original}\n// touched\n`);
+  try {
+    await until('hello after reload', () => panel.helloCount > before, 20_000);
+  } finally {
+    writeFileSync(file(rel), original);
+  }
+  await until('hello after restore', () => panel.helloCount > before + 1, 20_000);
+});
+
+test('open() reuses the panel for the same origin and joins hash paths', async () => {
+  const res = await api.open({ path: '#/settings', mode: 'edit' });
+  assert.ok(res.ok, JSON.stringify(res));
+  assert.equal(api.previews.all().length, 1);
+  assert.equal(res.url, `${DEV_URL}#/settings`);
+  assert.match(res.link, /^[a-z-]+:\/\/andreykats\.vibe-visual-editor\/open\?url=/);
+  const refused = await api.open({ url: 'http://example.com/' });
+  assert.equal(refused.ok, false);
+  await until('settings route', () => panel.url.endsWith('#/settings'));
+});
+
+test('edit makes the file dirty with a one-literal diff; save writes it', async () => {
+  const rel = 'src/views/home.ts';
+  const original = disk(rel);
+  const c = await resolve('Welcome home');
+  await panel.edits.edit(c, 'Hello "there"');
+  const d = await doc(rel);
+  assert.equal(d.isDirty, true);
+  assert.equal(d.getText(), original.replace("'Welcome home'", `'Hello "there"'`));
+  assert.equal(disk(rel), original, 'nothing on disk before save');
+  assert.equal(panel.edits.pendingCount, 1);
+  assert.deepEqual(panel.edits.pending(), [{ literalId: c.id, value: 'Hello "there"', original: 'Welcome home' }]);
+
+  await panel.save();
+  assert.equal(d.isDirty, false);
+  assert.equal(disk(rel), original.replace("'Welcome home'", `'Hello "there"'`));
+  assert.equal(panel.edits.pendingCount, 0);
+
+  // Put it back for later tests.
+  writeFileSync(file(rel), original);
+  await until('reloaded document', async () => (await doc(rel)).getText() === original);
+});
+
+test('a line break is written as an escaped \\n', async () => {
+  const rel = 'src/views/home.ts';
+  const original = disk(rel);
+  const c = await resolve('Edit me in place');
+  await panel.edits.edit(c, 'Edit me\nin place');
+  const d = await doc(rel);
+  assert.equal(d.getText(), original.replace("'Edit me in place'", "'Edit me\\nin place'"));
+  assert.deepEqual(panel.edits.pending(), [{ literalId: c.id, value: 'Edit me\nin place', original: 'Edit me in place' }]);
+  await panel.discard();
+  assert.equal(d.getText(), original);
+  await revert(rel);
+});
+
+test('discard restores exactly; undo and redo step through edits', async () => {
+  const rel = 'src/views/settings.ts';
+  const original = disk(rel);
+  await until('index refresh', async () => (await resolve('Videos')).raw === "'Videos'");
+  const c = await resolve('Videos');
+  await panel.edits.edit(c, 'Clips');
+  await panel.edits.edit({ ...c }, 'Clips and more'); // second edit of the same literal
+  const d = await doc(rel);
+  assert.ok(d.getText().includes("'Clips and more'"));
+  await panel.edits.undo();
+  assert.ok(d.getText().includes("'Clips'"));
+  await panel.edits.redo();
+  assert.ok(d.getText().includes("'Clips and more'"));
+  await panel.discard();
+  assert.equal(d.getText(), original);
+  assert.equal(panel.edits.pendingCount, 0);
+  assert.equal(d.getText(), disk(rel), 'text matches disk again');
+  await revert(rel);
+});
+
+test("the user's own unsaved edits survive edit, save and discard", async () => {
+  const rel = 'src/views/settings.ts';
+  const original = disk(rel);
+  const d = await doc(rel);
+  // The user types a comment at the top: offsets of everything below shift.
+  const userEdit = new vscode.WorkspaceEdit();
+  userEdit.insert(d.uri, new vscode.Position(0, 0), '// my note\n');
+  assert.ok(await vscode.workspace.applyEdit(userEdit));
+
+  const c = await resolve('Videos'); // offsets from disk, now stale for the document
+  await panel.edits.edit(c, 'Clips');
+  assert.equal(d.getText(), `// my note\n${original.replace("'Videos'", "'Clips'")}`);
+
+  await panel.discard();
+  assert.equal(d.getText(), `// my note\n${original}`, 'discard keeps the user edit');
+  assert.equal(d.isDirty, true);
+
+  await panel.edits.edit(c, 'Clips');
+  // Another file the user has dirty must not be saved by Vibe Visual Editor.
+  const other = await doc('src/main.ts');
+  const otherEdit = new vscode.WorkspaceEdit();
+  otherEdit.insert(other.uri, new vscode.Position(0, 0), '// unsaved\n');
+  assert.ok(await vscode.workspace.applyEdit(otherEdit));
+  await panel.save();
+  assert.equal(disk(rel), `// my note\n${original.replace("'Videos'", "'Clips'")}`);
+  assert.equal(other.isDirty, true, 'unrelated dirty file untouched');
+  assert.ok(!disk('src/main.ts').startsWith('// unsaved'));
+
+  writeFileSync(file(rel), original);
+  await revert('src/main.ts');
+  await until('reloaded document', async () => (await doc(rel)).getText() === original);
+});
+
+test('an edited range changed by someone else is dropped, and stale literals are refused', async () => {
+  const rel = 'src/views/home.ts';
+  await until('index refresh', async () => (await resolve('Welcome home')).raw === "'Welcome home'");
+  const c = await resolve('Welcome home');
+  await panel.edits.edit(c, 'Hi');
+  const d = await doc(rel);
+  const start = d.getText().indexOf("'Hi'");
+  const clash = new vscode.WorkspaceEdit();
+  clash.replace(d.uri, new vscode.Range(d.positionAt(start + 1), d.positionAt(start + 2)), 'X');
+  assert.ok(await vscode.workspace.applyEdit(clash));
+  assert.equal(panel.edits.pendingCount, 0, 'entry dropped');
+  await revert(rel);
+
+  // A candidate whose text no longer exists anywhere in the file.
+  await assert.rejects(panel.edits.edit({ ...c, id: 'stale', raw: "'Gone'", value: 'Gone', start: 0, end: 6 }, 'x'), /changed since the page loaded/);
+  // Files outside the workspace are refused.
+  await assert.rejects(panel.edits.edit({ ...c, id: 'outside', file: '/etc/hosts' }, 'x'), /outside the workspace/);
+  assert.equal((await doc(rel)).isDirty, false);
+});
+
+test('page messages: le:edit applies through the panel, le:select reaches the store', async () => {
+  const c = await resolve('Back');
+  const onFrame = (panel as unknown as { onFrameMessage(d: unknown): Promise<void> }).onFrameMessage.bind(panel);
+  await onFrame({ type: 'le:edit', v: 1, requestId: 7, candidates: [c], newValue: 'Return' });
+  assert.equal(panel.edits.pendingCount, 1);
+  await panel.discard();
+  await revert('src/views/settings.ts');
+
+  await onFrame({ type: 'le:edit', v: 1, requestId: 8, candidates: [], newValue: 'x' }); // invalid: ignored
+  assert.equal(panel.edits.pendingCount, 0);
+
+  const descriptor = {
+    tag: 'h2', classList: [], attributes: {}, textContent: 'Videos', selector: 'h2', outerHTML: '<h2>Videos</h2>',
+    boundingRect: { x: 0, y: 0, width: 1, height: 1 }, styles: {}, creationSiteIsAncestor: false,
+    pageUrl: DEV_URL, route: '', timestamp: 1,
+  };
+  await onFrame({ type: 'le:select', v: 1, descriptor });
+  assert.equal(api.selection.get()?.descriptor.tag, 'h2');
+  await onFrame({ type: 'le:hello', v: 99, url: DEV_URL, title: '' });
+  assert.equal(panel.status, 'protocol-mismatch');
+});
+
+test('bridge: token required; selection and state served; open validated', async () => {
+  const entry = JSON.parse(readFileSync(path.join(HOME, 'windows', `${process.pid}.json`), 'utf8')) as WindowEntry;
+  const base = `http://127.0.0.1:${entry.port}`;
+  assert.equal((await fetch(`${base}/selection`)).status, 401);
+  assert.equal((await fetch(`${base}/selection`, { headers: { Authorization: 'Bearer nope' } })).status, 401);
+  const auth = { Authorization: `Bearer ${entry.token}` };
+  const sel = (await (await fetch(`${base}/selection`, { headers: auth })).json()) as { selection: { tag: string } | null };
+  assert.equal(sel.selection?.tag, 'h2');
+  const state = (await (await fetch(`${base}/state`, { headers: auth })).json()) as { previews: unknown[]; devServers: { url: string; running: boolean }[] };
+  assert.equal(state.previews.length, 1);
+  assert.ok(state.devServers.some((s) => s.url === DEV_URL && s.running), JSON.stringify(state.devServers));
+  const bad = await fetch(`${base}/open`, { method: 'POST', headers: auth, body: '{"mode":"paint"}' });
+  assert.equal(bad.status, 400);
+  const ok = (await (await fetch(`${base}/open`, { method: 'POST', headers: auth, body: '{"path":"#/"}' })).json()) as { ok: boolean };
+  assert.equal(ok.ok, true);
+});
+
+export async function run(): Promise<void> {
+  const failures: string[] = [];
+  for (const t of tests) {
+    const started = Date.now();
+    try {
+      await t.fn();
+      console.log(`  ✓ ${t.name} (${Date.now() - started}ms)`);
+    } catch (err) {
+      failures.push(t.name);
+      console.log(`  ✗ ${t.name}\n    ${(err as Error).stack?.split('\n').slice(0, 6).join('\n    ')}`);
+    }
+  }
+  console.log(`\n  ${tests.length - failures.length} passed, ${failures.length} failed`);
+  if (failures.length > 0) throw new Error(`${failures.length} test(s) failed`);
+}

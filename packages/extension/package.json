@@ -1,0 +1,147 @@
+{
+  "name": "vibe-visual-editor",
+  "displayName": "Vibe Visual Editor",
+  "description": "Preview a running Vite app in VS Code, edit its text in place, and share selected elements with Claude Code and Codex.",
+  "version": "0.1.0",
+  "private": true,
+  "publisher": "andreykats",
+  "license": "MIT",
+  "author": {
+    "name": "Andrey Kats"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/andreykats/vibe-visual-editor.git",
+    "directory": "packages/extension"
+  },
+  "bugs": {
+    "url": "https://github.com/andreykats/vibe-visual-editor/issues"
+  },
+  "homepage": "https://github.com/andreykats/vibe-visual-editor#readme",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1e1b4b",
+    "theme": "dark"
+  },
+  "preview": true,
+  "engines": {
+    "vscode": "^1.140.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "vite",
+    "preview",
+    "visual editor",
+    "live edit",
+    "inline edit",
+    "wysiwyg",
+    "claude code",
+    "codex",
+    "mcp",
+    "ai agent",
+    "frontend",
+    "copy editing"
+  ],
+  "main": "./dist/extension.cjs",
+  "activationEvents": [
+    "onUri",
+    "onWebviewPanel:vibeVisualEditor.preview",
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "Vibe Visual Editor writes edits into your source files and talks to your dev server, so it needs a trusted workspace."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Edits are written to source files on disk."
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "vibeVisualEditor.openPreview",
+        "title": "Open Preview",
+        "category": "Vibe Visual Editor"
+      },
+      {
+        "command": "vibeVisualEditor.save",
+        "title": "Save Edits",
+        "category": "Vibe Visual Editor"
+      },
+      {
+        "command": "vibeVisualEditor.discard",
+        "title": "Discard Edits",
+        "category": "Vibe Visual Editor"
+      },
+      {
+        "command": "vibeVisualEditor.undo",
+        "title": "Undo Edit",
+        "category": "Vibe Visual Editor"
+      },
+      {
+        "command": "vibeVisualEditor.redo",
+        "title": "Redo Edit",
+        "category": "Vibe Visual Editor"
+      },
+      {
+        "command": "vibeVisualEditor.setMode",
+        "title": "Set Mode",
+        "category": "Vibe Visual Editor"
+      },
+      {
+        "command": "vibeVisualEditor.copySelectionForChat",
+        "title": "Copy Selection for Chat",
+        "category": "Vibe Visual Editor"
+      },
+      {
+        "command": "vibeVisualEditor.configureAgents",
+        "title": "Configure Claude Code and Codex",
+        "category": "Vibe Visual Editor"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vibeVisualEditor.save",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "activeWebviewPanelId == 'vibeVisualEditor.preview'"
+      },
+      {
+        "command": "vibeVisualEditor.undo",
+        "key": "ctrl+z",
+        "mac": "cmd+z",
+        "when": "activeWebviewPanelId == 'vibeVisualEditor.preview'"
+      },
+      {
+        "command": "vibeVisualEditor.redo",
+        "key": "ctrl+shift+z",
+        "mac": "cmd+shift+z",
+        "when": "activeWebviewPanelId == 'vibeVisualEditor.preview'"
+      },
+      {
+        "command": "vibeVisualEditor.redo",
+        "key": "ctrl+y",
+        "when": "activeWebviewPanelId == 'vibeVisualEditor.preview' && !isMac"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "node scripts/build.mjs",
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node test/runTest.mjs",
+    "package": "vsce package --no-dependencies -o vibe-visual-editor.vsix"
+  },
+  "devDependencies": {
+    "@vibe-visual-editor/mcp-bridge": "0.1.0",
+    "@vibe-visual-editor/protocol": "0.1.0",
+    "@types/vscode": "~1.140.0",
+    "@vscode/test-electron": "^3.1.0",
+    "@vscode/vsce": "^4.0.0",
+    "esbuild": "^0.28.2"
+  }
+}

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3730a3"/>
+      <stop offset="1" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="pointer" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c084fc"/>
+      <stop offset="1" stop-color="#9333ea"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <!-- the app page -->
+  <rect x="36" y="52" width="184" height="148" rx="14" fill="#f8fafc"/>
+  <path d="M36 66a14 14 0 0 1 14-14h156a14 14 0 0 1 14 14v12H36z" fill="#e2e8f0"/>
+  <circle cx="54" cy="65" r="5" fill="#f87171"/>
+  <circle cx="70" cy="65" r="5" fill="#fbbf24"/>
+  <circle cx="86" cy="65" r="5" fill="#34d399"/>
+  <!-- text lines; the middle one is being edited -->
+  <rect x="56" y="96" width="104" height="12" rx="6" fill="#334155"/>
+  <rect x="50" y="122" width="132" height="30" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="4"/>
+  <rect x="60" y="131" width="84" height="12" rx="6" fill="#1d4ed8"/>
+  <rect x="152" y="127" width="5" height="20" rx="2" fill="#1d4ed8"/>
+  <rect x="56" y="168" width="72" height="12" rx="6" fill="#94a3b8"/>
+  <!-- pointer -->
+  <path d="M168 150l52 22-22 8 14 26-12 6-14-26-18 16z" fill="url(#pointer)" stroke="#fff" stroke-width="6" stroke-linejoin="round" paint-order="stroke"/>
+</svg>

@@ -1,0 +1,20 @@
+<!doctype html>
+<html>
+  <body style="margin:0">
+    <iframe id="frame" style="width:1000px;height:700px;border:0"></iframe>
+    <script>
+      // Plays the Vibe Visual Editor webview: acks the handshake and records page messages.
+      const target = __TARGET__;
+      const origin = new URL(target).origin;
+      const frame = document.getElementById('frame');
+      window.received = [];
+      window.addEventListener('message', (e) => {
+        if (e.source !== frame.contentWindow) return;
+        window.received.push(e.data);
+        if (e.data && e.data.type === 'le:hello') frame.contentWindow.postMessage({ type: 'le:ack', v: e.data.v }, origin);
+      });
+      window.toFrame = (msg) => frame.contentWindow.postMessage({ v: 1, ...msg }, origin);
+      frame.src = target;
+    </script>
+  </body>
+</html>

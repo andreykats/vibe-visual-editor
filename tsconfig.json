@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    // Workspace packages export their TS source under "vibe-visual-editor:source",
+    // so checking the monorepo doesn't need a build first. Consumers get dist types.
+    "customConditions": ["vibe-visual-editor:source"],
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["packages/*/src", "packages/*/test", "packages/*/scripts", "fixtures/h-app/src", "fixtures/h-app/vite.config.ts", "tests", "vitest.config.ts", "playwright.config.ts"]
+}
