@@ -1,10 +1,10 @@
 name: Release
 
 # Push a tag to release one package:
-#   extension-vX.Y.Z    -> VS Code Marketplace
+#   extension-vX.Y.Z    -> VS Code Marketplace, then Open VSX
 #   vite-plugin-vX.Y.Z  -> npm
-# Both publish through trusted publishing (GitHub OIDC), so no tokens are stored.
-# The trusted publishers on the Marketplace and npm name this file, release.yml.
+# All publish through trusted publishing (GitHub OIDC), so no tokens are stored.
+# The trusted publishers on each registry name this file, release.yml.
 on:
   push:
     tags: ['extension-v*', 'vite-plugin-v*']
@@ -51,15 +51,38 @@ jobs:
         run: npm run package
       - name: Publish to the Marketplace
         working-directory: packages/extension
-        run: npx vsce publish --oidc --packagePath vibe-visual-editor.vsix
+        # --skip-duplicate lets a partly failed release be re-run.
+        run: npx vsce publish --oidc --skip-duplicate --packagePath vibe-visual-editor.vsix
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
         run: |
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 && exit 0 # re-run
           node scripts/changelog-section.mjs "$VERSION" > notes.md
           gh release create "$GITHUB_REF_NAME" packages/extension/vibe-visual-editor.vsix \
             --title "Extension $VERSION" --notes-file notes.md
+
+  # Its own job, so a failure here can be re-run without touching the Marketplace release.
+  open-vsx:
+    needs: [check, extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Open VSX trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Download the released .vsix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$GITHUB_REF_NAME" --pattern '*.vsix'
+      - name: Publish to Open VSX
+        run: npx ovsx publish --trusted-publishing --skip-duplicate --packagePath vibe-visual-editor.vsix
 
   vite-plugin:
     needs: [check, test]
@@ -81,11 +104,19 @@ jobs:
       - run: npm ci
       - name: Publish to npm
         # prepublishOnly builds the package. Provenance is added automatically.
-        run: npm publish -w @vibe-visual-editor/vite-plugin
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          if npm view "@vibe-visual-editor/vite-plugin@$VERSION" version > /dev/null 2>&1; then
+            echo "$VERSION is already on npm (re-run)"
+          else
+            npm publish -w @vibe-visual-editor/vite-plugin
+          fi
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
         run: |
+          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 && exit 0 # re-run
           gh release create "$GITHUB_REF_NAME" --title "Vite plugin $VERSION" \
             --notes "Published to npm as [@vibe-visual-editor/vite-plugin@$VERSION](https://www.npmjs.com/package/@vibe-visual-editor/vite-plugin/v/$VERSION)."

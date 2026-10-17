@@ -2,7 +2,7 @@
 
 Two things are published:
 
-- the VS Code extension `andreykats.vibe-visual-editor`, to the Visual Studio Marketplace
+- the VS Code extension `andreykats.vibe-visual-editor`, to the Visual Studio Marketplace and to [Open VSX](https://open-vsx.org), which VSCodium and other VS Code–compatible editors use
 - the Vite plugin `@vibe-visual-editor/vite-plugin`, to npm
 
 The other packages are internal and stay `private`. `protocol` is inlined into both published packages, and `mcp-bridge` is bundled into the extension.
@@ -35,8 +35,11 @@ The workflow then:
    - the extension with `vsce publish --oidc`
    - the plugin with `npm publish` (provenance is added automatically)
 4. creates a GitHub Release. Extension releases have the `.vsix` attached.
+5. for an extension, publishes that same `.vsix` to Open VSX with `ovsx publish --trusted-publishing`. This is a separate job, so if it fails it can be re-run without touching the Marketplace.
 
-Both registries use **trusted publishing**: GitHub Actions proves which repository and workflow is publishing, and no token is stored anywhere.
+Every publish step skips a version that's already published, so **Re-run failed jobs** is safe.
+
+All three registries use **trusted publishing**: GitHub Actions proves which repository and workflow is publishing, and no token is stored anywhere.
 
 ## One-time setup
 
@@ -50,6 +53,19 @@ Trusted publishing is configured on each registry and names this repository and 
 | Environment | (none) |
 
 - **npm:** on https://www.npmjs.com/package/@vibe-visual-editor/vite-plugin, go to **Settings → Trusted Publisher → GitHub Actions** and enter the values above, with **Allow `npm publish`** checked (the workflow runs `npm publish`, not `npm stage publish`). Also set **Publishing access** to "Require two-factor authentication and disallow bypass 2fa tokens". npm states that trusted publishers keep working with every publishing-access option. See [npm: trusted publishers](https://docs.npmjs.com/trusted-publishers).
+- **Open VSX:**
+  1. Create an [Eclipse account](https://accounts.eclipse.org/user/register) and fill in the **GitHub Username** field.
+  2. Log in at https://open-vsx.org with GitHub. On your profile, choose **Log in with Eclipse**, then sign the Publisher Agreement.
+  3. The first version has to be published with an access token. Create one under **Settings → Access Tokens**, then run:
+     ```sh
+     npx ovsx create-namespace andreykats -p <token>
+     npx ovsx publish --packagePath packages/extension/vibe-visual-editor.vsix -p <token>
+     ```
+     The namespace must be spelled exactly like `publisher` in the manifest (`andreykats`, lowercase).
+  4. Trusted publishing needs you to be the namespace's **owner**. Request ownership with an issue at https://github.com/EclipseFdn/open-vsx.org/issues (label `namespace`), linking this repository and the Marketplace listing.
+  5. Once ownership is granted, add the trusted publisher under **Settings → Trusted Publishers** with the values above, then delete the access token.
+
+  See [Publishing Extensions](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions) and [Trusted Publishing](https://github.com/eclipse/openvsx/wiki/Trusted-Publishing).
 - **Marketplace:** on https://marketplace.visualstudio.com/manage, add a trusted publishing policy for the `andreykats` publisher with the values above. See the "Trusted publishing" section of the [vsce README](https://github.com/microsoft/vscode-vsce#trusted-publishing).
 
 If the Marketplace policy isn't available to your publisher, the supported alternative is Microsoft Entra workload identity. Log in with `azure/login@v3` and a user-assigned managed identity that is a Contributor on the publisher, then run `vsce publish --azure-credential`. See [Publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension). Azure DevOps personal access tokens are retired on 1 December 2026.
