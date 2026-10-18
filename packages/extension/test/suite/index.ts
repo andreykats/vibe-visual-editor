@@ -44,6 +44,20 @@ async function doc(rel: string): Promise<vscode.TextDocument> {
   return vscode.workspace.openTextDocument(vscode.Uri.file(file(rel)));
 }
 
+/**
+ * Writes `content` to a file through VS Code (edit and save), so the open
+ * document matches the disk at once. Writing to disk directly would leave the
+ * document waiting for the file watcher, which can lag on CI.
+ */
+async function restore(rel: string, content: string): Promise<void> {
+  const d = await doc(rel);
+  const edit = new vscode.WorkspaceEdit();
+  edit.replace(d.uri, new vscode.Range(d.positionAt(0), d.positionAt(d.getText().length)), content);
+  assert.ok(await vscode.workspace.applyEdit(edit), `restore ${rel}`);
+  assert.ok(await d.save(), `save ${rel}`);
+  assert.equal(disk(rel), content);
+}
+
 /** Puts a file back to its on-disk content and clears its dirty state. */
 async function revert(rel: string): Promise<void> {
   const d = await doc(rel);
@@ -136,8 +150,7 @@ test('edit makes the file dirty with a one-literal diff; save writes it', async 
   assert.equal(panel.edits.pendingCount, 0);
 
   // Put it back for later tests.
-  writeFileSync(file(rel), original);
-  await until('reloaded document', async () => (await doc(rel)).getText() === original);
+  await restore(rel, original);
 });
 
 test('a line break is written as an escaped \\n', async () => {
@@ -223,9 +236,8 @@ test("the user's own unsaved edits survive edit, save and discard", async () => 
   assert.equal(other.isDirty, true, 'unrelated dirty file untouched');
   assert.ok(!disk('src/main.ts').startsWith('// unsaved'));
 
-  writeFileSync(file(rel), original);
+  await restore(rel, original);
   await revert('src/main.ts');
-  await until('reloaded document', async () => (await doc(rel)).getText() === original);
 });
 
 test('an edited range changed by someone else is dropped, and stale literals are refused', async () => {
