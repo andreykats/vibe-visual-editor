@@ -29,15 +29,26 @@ async function until<T>(what: string, fn: () => T | Promise<T>, timeoutMs = 15_0
 const file = (rel: string) => path.join(WORKSPACE, rel);
 const disk = (rel: string) => readFileSync(file(rel), 'utf8');
 
+/**
+ * The one candidate the dev server has for `text`. After a test saves a file,
+ * Vite re-indexes it a moment later (and may briefly drop it while it reads a
+ * half-written file), so this waits for the index to settle before failing.
+ */
 async function resolve(text: string): Promise<Candidate> {
-  const res = await fetch(`${DEV_ORIGIN}/__vibe-visual-editor/resolve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  });
-  const body = (await res.json()) as ResolveResponse;
-  assert.equal(body.candidates.length, 1, `expected one candidate for ${text}`);
-  return body.candidates[0]!;
+  let candidates: Candidate[] = [];
+  const deadline = Date.now() + 10_000;
+  do {
+    const res = await fetch(`${DEV_ORIGIN}/__vibe-visual-editor/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    candidates = ((await res.json()) as ResolveResponse).candidates;
+    if (candidates.length === 1) return candidates[0]!;
+    await sleep(100);
+  } while (Date.now() < deadline);
+  assert.equal(candidates.length, 1, `expected one candidate for ${text}`);
+  return candidates[0]!;
 }
 
 async function doc(rel: string): Promise<vscode.TextDocument> {
