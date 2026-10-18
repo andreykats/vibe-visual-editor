@@ -31,11 +31,8 @@ The workflow then:
 
 1. checks that the tag matches the package version (`scripts/release-tag.mjs`)
 2. runs the full test suite (`ci.yml`)
-3. publishes:
-   - the extension with `vsce publish --oidc`
-   - the plugin with `npm publish` (provenance is added automatically)
-4. creates a GitHub Release. Extension releases have the `.vsix` attached.
-5. for an extension, publishes that same `.vsix` to Open VSX with `ovsx publish --trusted-publishing`. This is a separate job, so if it fails it can be re-run without touching the Marketplace.
+3. for the plugin: publishes with `npm publish` (provenance is added automatically) and creates a GitHub Release
+4. for the extension: packages the `.vsix` and puts it on a GitHub Release. Separate jobs then publish that same file to the Marketplace (`vsce publish --oidc`) and to Open VSX (`ovsx publish --trusted-publishing`). If one registry fails, the other isn't affected, and the failed job can be re-run on its own.
 
 Every publish step skips a version that's already published, so **Re-run failed jobs** is safe.
 
@@ -68,11 +65,13 @@ Trusted publishing is configured on each registry and names this repository and 
   See [Publishing Extensions](https://github.com/eclipse/openvsx/wiki/Publishing-Extensions) and [Trusted Publishing](https://github.com/eclipse/openvsx/wiki/Trusted-Publishing).
 - **Marketplace:** on https://marketplace.visualstudio.com/manage, add a trusted publishing policy for the `andreykats` publisher with the values above. See the "Trusted publishing" section of the [vsce README](https://github.com/microsoft/vscode-vsce#trusted-publishing).
 
+**Status (October 2026):** Marketplace trusted publishing doesn't work yet. In vsce 4.0.0, `--oidc` sends the token exchange without an `api-version`, and the Marketplace answers `400 Bad Request`. vsce's main branch has the fix, but it isn't released, and vsce's own "Support trusted publishing" issue (#1275) is still open. Until a vsce release fixes it, the `marketplace` job fails. Upload the `.vsix` from the GitHub Release by hand instead (see below).
+
 If the Marketplace policy isn't available to your publisher, the supported alternative is Microsoft Entra workload identity. Log in with `azure/login@v3` and a user-assigned managed identity that is a Contributor on the publisher, then run `vsce publish --azure-credential`. See [Publishing extensions](https://code.visualstudio.com/api/working-with-extensions/publishing-extension). Azure DevOps personal access tokens are retired on 1 December 2026.
 
 ## Manual fallback
 
-- **Extension:** run `npm run package` and upload `packages/extension/vibe-visual-editor.vsix` at https://marketplace.visualstudio.com/manage.
+- **Extension:** download the `.vsix` from the version's GitHub Release (or run `npm run package`) and upload it at https://marketplace.visualstudio.com/manage.
 - **Plugin:** run `npm publish -w @vibe-visual-editor/vite-plugin` in a terminal. It asks you to approve in the browser (two-factor). npm only offers the browser approval in an interactive terminal.
 
 The manifest sets `"preview": true`, which shows a Preview badge on the Marketplace listing. Remove it at 1.0.

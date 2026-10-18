@@ -1,7 +1,7 @@
 name: Release
 
 # Push a tag to release one package:
-#   extension-vX.Y.Z    -> VS Code Marketplace, then Open VSX
+#   extension-vX.Y.Z    -> GitHub Release with the .vsix, then the Marketplace and Open VSX
 #   vite-plugin-vX.Y.Z  -> npm
 # All publish through trusted publishing (GitHub OIDC), so no tokens are stored.
 # The trusted publishers on each registry name this file, release.yml.
@@ -33,13 +33,15 @@ jobs:
     needs: check
     uses: ./.github/workflows/ci.yml
 
+  # Packages the .vsix and puts it on the GitHub Release. Each registry then
+  # publishes that same file in its own job, so one registry failing doesn't
+  # block the others, and a failed job can be re-run on its own.
   extension:
     needs: [check, test]
     if: needs.check.outputs.package == 'extension'
     runs-on: ubuntu-latest
     permissions:
       contents: write # GitHub Release
-      id-token: write # Marketplace trusted publishing
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -49,21 +51,40 @@ jobs:
       - run: npm ci
       - name: Package
         run: npm run package
-      - name: Publish to the Marketplace
-        working-directory: packages/extension
-        # --skip-duplicate lets a partly failed release be re-run.
-        run: npx vsce publish --oidc --skip-duplicate --packagePath vibe-visual-editor.vsix
       - name: GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
         run: |
-          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 && exit 0 # re-run
-          node scripts/changelog-section.mjs "$VERSION" > notes.md
-          gh release create "$GITHUB_REF_NAME" packages/extension/vibe-visual-editor.vsix \
-            --title "Extension $VERSION" --notes-file notes.md
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" packages/extension/vibe-visual-editor.vsix --clobber
+          else
+            node scripts/changelog-section.mjs "$VERSION" > notes.md
+            gh release create "$GITHUB_REF_NAME" packages/extension/vibe-visual-editor.vsix \
+              --title "Extension $VERSION" --notes-file notes.md
+          fi
 
-  # Its own job, so a failure here can be re-run without touching the Marketplace release.
+  marketplace:
+    needs: [check, extension]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Marketplace trusted publishing
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Download the released .vsix
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$GITHUB_REF_NAME" --pattern '*.vsix'
+      - name: Publish to the Marketplace
+        # --skip-duplicate lets a partly failed release be re-run.
+        run: npx vsce publish --oidc --skip-duplicate --packagePath vibe-visual-editor.vsix
+
   open-vsx:
     needs: [check, extension]
     runs-on: ubuntu-latest
