@@ -92,7 +92,8 @@ describe('production build', () => {
     expect(files.length).toBeGreaterThan(1);
     for (const f of files) {
       const text = readFileSync(f, 'utf8');
-      expect(text, f).not.toMatch(/vibe-visual-editor|__le\(|__vibe-visual-editor/);
+      // The plugin's markers, not its bare name, which can also be part of the checkout's path.
+      expect(text, f).not.toMatch(/virtual:vibe-visual-editor|\/__vibe-visual-editor\/|data-vve-loc|__leFile|__le\(/);
     }
     expect(existsSync(path.join(outDir, 'index.html'))).toBe(true);
   });

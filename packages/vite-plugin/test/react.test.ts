@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { build, createServer, type ViteDevServer } from 'vite';
 
 const fixture = fileURLToPath(new URL('../../../fixtures/react-app', import.meta.url));
+/** What the plugin adds to code. Not the bare name, which can also be part of the checkout's path. */
+const PLUGIN_MARKERS = /virtual:vibe-visual-editor|\/__vibe-visual-editor\/|data-vve-loc|__leFile|__le\(/;
 
 describe('plugin against fixtures/react-app', () => {
   let server: ViteDevServer;
@@ -47,13 +49,20 @@ describe('plugin against fixtures/react-app', () => {
 describe('React production build', () => {
   it('contains no Vibe Visual Editor code or attributes', async () => {
     const outDir = path.join(fixture, 'dist');
-    await build({ root: fixture, configFile: path.join(fixture, 'vite.config.ts'), logLevel: 'silent', build: { outDir, emptyOutDir: true } });
+    // Vitest sets NODE_ENV=test, which would make this a development build of React.
+    const nodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      await build({ root: fixture, configFile: path.join(fixture, 'vite.config.ts'), logLevel: 'silent', build: { outDir, emptyOutDir: true } });
+    } finally {
+      process.env.NODE_ENV = nodeEnv;
+    }
     try {
       const files = readdirSync(outDir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile());
       expect(files.length).toBeGreaterThan(1);
       for (const f of files) {
         const text = readFileSync(path.join(f.parentPath, f.name), 'utf8');
-        expect(text, f.name).not.toMatch(/vibe-visual-editor|data-vve-loc|__leFile/);
+        expect(text, f.name).not.toMatch(PLUGIN_MARKERS);
       }
     } finally {
       rmSync(outDir, { recursive: true, force: true });
