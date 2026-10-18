@@ -45,7 +45,7 @@ Everything runs on your machine. The preview only opens loopback URLs, and nothi
 2. Start the dev server (`npm run dev`) and run **Vibe Visual Editor: Open Preview** from the Command Palette.
 3. To use the agent features, run **Vibe Visual Editor: Configure Claude Code and Codex** once, then start a new agent session.
 
-The [setup guide](https://github.com/andreykats/vibe-visual-editor/blob/main/docs/setup.md) covers every option and troubleshooting.
+The [setup guide](https://github.com/andreykats/vscode-visual-editor/blob/main/docs/setup.md) covers every option and troubleshooting.
 
 ## Using the preview
 
@@ -67,8 +67,8 @@ Only text that comes straight from your source can be edited: string literals, a
 
 ## Feedback
 
-Report bugs and ideas on [GitHub](https://github.com/andreykats/vibe-visual-editor/issues).
+Report bugs and ideas on [GitHub](https://github.com/andreykats/vscode-visual-editor/issues).
 
 ## License
 
-[MIT](https://github.com/andreykats/vibe-visual-editor/blob/main/LICENSE). Created by Andrey Kats.
+[MIT](https://github.com/andreykats/vscode-visual-editor/blob/main/LICENSE). Created by Andrey Kats.

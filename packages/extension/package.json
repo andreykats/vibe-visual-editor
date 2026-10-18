@@ -11,13 +11,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/andreykats/vibe-visual-editor.git",
+    "url": "https://github.com/andreykats/vscode-visual-editor.git",
     "directory": "packages/extension"
   },
   "bugs": {
-    "url": "https://github.com/andreykats/vibe-visual-editor/issues"
+    "url": "https://github.com/andreykats/vscode-visual-editor/issues"
   },
-  "homepage": "https://github.com/andreykats/vibe-visual-editor#readme",
+  "homepage": "https://github.com/andreykats/vscode-visual-editor#readme",
   "icon": "media/icon.png",
   "galleryBanner": {
     "color": "#1e1b4b",

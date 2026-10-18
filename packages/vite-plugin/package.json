@@ -20,13 +20,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/andreykats/vibe-visual-editor.git",
+    "url": "git+https://github.com/andreykats/vscode-visual-editor.git",
     "directory": "packages/vite-plugin"
   },
   "bugs": {
-    "url": "https://github.com/andreykats/vibe-visual-editor/issues"
+    "url": "https://github.com/andreykats/vscode-visual-editor/issues"
   },
-  "homepage": "https://github.com/andreykats/vibe-visual-editor#readme",
+  "homepage": "https://github.com/andreykats/vscode-visual-editor#readme",
   "type": "module",
   "exports": {
     ".": {
