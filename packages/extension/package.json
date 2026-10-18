@@ -2,7 +2,7 @@
   "name": "vibe-visual-editor",
   "displayName": "Vibe Visual Editor",
   "description": "Preview a running Vite app in VS Code, edit its text in place, and share selected elements with Claude Code and Codex.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "publisher": "andreykats",
   "license": "MIT",

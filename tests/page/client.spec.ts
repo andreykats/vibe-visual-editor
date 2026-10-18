@@ -1,58 +1,14 @@
-import { expect, test, type FrameLocator, type Locator, type Page } from '@playwright/test';
-import { APP_URL, HARNESS, UNTRUSTED_HARNESS } from '../../playwright.config';
+import { expect, test, type Locator } from '@playwright/test';
+import { PROTOCOL_VERSION } from '@vibe-visual-editor/protocol';
+import { APP_URL, UNTRUSTED_HARNESS } from '../../playwright.config';
+import { clickText, editText, lastOf, open, received, setMode, toFrame } from './helpers';
 
-type Msg = { type: string; [key: string]: unknown };
-
-async function open(page: Page, hash = '', harness = HARNESS): Promise<FrameLocator> {
-  await page.goto(`${harness}/?target=${encodeURIComponent(APP_URL + hash)}`);
-  const frame = page.frameLocator('#frame');
-  await expect(frame.locator('h1')).toBeVisible();
-  await expect.poll(() => received(page, 'le:hello')).toHaveLength(1);
-  return frame;
-}
-
-function received(page: Page, type?: string): Promise<Msg[]> {
-  return page.evaluate((t) => (window as unknown as { received: Msg[] }).received.filter((m) => !t || m.type === t), type);
-}
-
-/** Waits until at least `count` messages of `type` arrived and returns the latest. */
-async function lastOf(page: Page, type: string, count = 1): Promise<Msg> {
-  await expect.poll(async () => (await received(page, type)).length).toBeGreaterThanOrEqual(count);
-  const list = await received(page, type);
-  return list[list.length - 1]!;
-}
-
-/** Clicks the middle of the element's first text node, as a user aiming at the text would. */
-async function clickText(target: Locator): Promise<void> {
-  await clickTextOnly(target);
-}
-
-/** Clicks the text and waits for the inline editor to open on it. */
-async function editText(target: Locator): Promise<void> {
-  await clickTextOnly(target);
-  await expect(target.locator('span[contenteditable="plaintext-only"]')).toBeVisible();
-}
-
-async function clickTextOnly(target: Locator): Promise<void> {
-  const position = await target.evaluate((el) => {
-    const text = [...el.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())!;
-    const range = document.createRange();
-    range.selectNodeContents(text);
-    const r = range.getBoundingClientRect();
-    const box = el.getBoundingClientRect();
-    return { x: r.left - box.left + r.width / 2, y: r.top - box.top + r.height / 2 };
-  });
-  await target.click({ position });
-}
-
-const toFrame = (page: Page, msg: Msg) => page.evaluate((m) => (window as unknown as { toFrame(m: Msg): void }).toFrame(m), msg);
-const setMode = (page: Page, mode: string) => toFrame(page, { type: 'le:setMode', mode });
 
 test('handshake: hello, then ready once the trusted parent acks', async ({ page }) => {
   await open(page);
   const hello = await lastOf(page, 'le:hello');
-  expect(hello).toMatchObject({ v: 1, url: APP_URL, title: 'h-app fixture' });
-  expect(await lastOf(page, 'le:ready')).toMatchObject({ v: 1, url: APP_URL });
+  expect(hello).toMatchObject({ v: PROTOCOL_VERSION, url: APP_URL, title: 'h-app fixture' });
+  expect(await lastOf(page, 'le:ready')).toMatchObject({ v: PROTOCOL_VERSION, url: APP_URL });
 });
 
 test('select mode: click selects, is swallowed, and describes the element', async ({ page }) => {

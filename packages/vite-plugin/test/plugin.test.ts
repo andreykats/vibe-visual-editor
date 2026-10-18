@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PROTOCOL_VERSION } from '@vibe-visual-editor/protocol';
 import { build, createServer, type ViteDevServer } from 'vite';
 
 const fixture = fileURLToPath(new URL('../../../fixtures/h-app', import.meta.url));
@@ -27,13 +28,13 @@ describe('plugin against fixtures/h-app', () => {
 
   it('writes the discovery file', () => {
     const info = JSON.parse(readFileSync(path.join(fixture, '.vibe-visual-editor/server.json'), 'utf8'));
-    expect(info).toMatchObject({ root: fixture, pid: process.pid, protocolVersion: 1 });
+    expect(info).toMatchObject({ root: fixture, pid: process.pid, protocolVersion: PROTOCOL_VERSION });
     expect(info.url).toBe(`${base}/h-app/`);
   });
 
   it('reports health', async () => {
     const res = await fetch(`${base}/__vibe-visual-editor/health`);
-    expect(await res.json()).toEqual({ protocolVersion: 1, adapters: ['h(h)'], root: fixture });
+    expect(await res.json()).toEqual({ protocolVersion: PROTOCOL_VERSION, adapters: ['h(h)'], root: fixture });
   });
 
   it('wraps creation sites and returns a source map', async () => {

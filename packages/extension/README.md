@@ -2,7 +2,7 @@
 
 See your running Vite app in a VS Code tab, fix its text by typing right on the page, and point Claude Code or Codex at the exact element you mean.
 
-> **Preview release.** v0.1 works with apps that build their DOM with an `h(tag, attrs, ...children)` helper. Support for JSX frameworks is planned.
+> **Preview release.** Works with React (JSX) apps, and with apps that build their DOM with an `h(tag, attrs, ...children)` helper.
 
 ## What it does
 
@@ -27,15 +27,18 @@ Everything runs on your machine. The preview only opens loopback URLs, and nothi
    npm install -D @vibe-visual-editor/vite-plugin
    ```
 
-   Then register it in `vite.config.ts`, pointing `from` at the module that exports your element helper:
+   Then register it in `vite.config.ts`. For React:
 
    ```ts
-   import vibeVisualEditor, { hAdapter } from '@vibe-visual-editor/vite-plugin';
+   import react from '@vitejs/plugin-react';
+   import vibeVisualEditor, { reactAdapter } from '@vibe-visual-editor/vite-plugin';
 
    export default defineConfig({
-     plugins: [vibeVisualEditor({ adapters: [hAdapter({ factory: 'h', from: '/src/ui/dom.ts' })] })],
+     plugins: [react(), vibeVisualEditor({ adapters: [reactAdapter()] })],
    });
    ```
+
+   For an `h()` helper, use `hAdapter({ factory: 'h', from: '/src/ui/dom.ts' })` instead, with `from` pointing at the module that exports it.
 
    Add `.vibe-visual-editor/` to `.gitignore`. The dev server writes a small discovery file there.
 
@@ -52,7 +55,7 @@ Pick a mode in the preview's toolbar:
 - **Edit text:** a solid outline marks text you can edit, and a dashed one marks text built at runtime. Enter commits an edit, Esc cancels it and Shift+Enter adds a line break. Cmd+S / Ctrl+S saves, and Cmd+Z / Ctrl+Z undoes.
 - **Select:** click an element, then ask your agent about "the selected element".
 
-Only text that comes from a string literal can be edited. Tags, attributes, classes and styles can't. For those, select the element and ask the agent.
+Only text that comes straight from your source can be edited: string literals, and in React, text between tags and text props like `<Card title="…" />`. Tags, attributes, classes and styles can't. For those, select the element and ask the agent.
 
 ## Commands
 

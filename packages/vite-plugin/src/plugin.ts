@@ -8,6 +8,7 @@ import type { Plugin, ViteDevServer } from 'vite';
 import {
   AnalyzeRequestSchema,
   formatIssues,
+  LOC_ATTRIBUTE,
   PROTOCOL_VERSION,
   ResolveRequestSchema,
   type AnalyzeResponse,
@@ -35,12 +36,18 @@ const RESOLVED_PREFIX = '\0';
 export const INDEX_CHANGED_EVENT = 'vibe-visual-editor:index-changed';
 const MAX_BODY = 6 * 1024 * 1024;
 
-/** Records each tagged element's creation site in a page-global WeakMap read by the client. */
-const RUNTIME_CODE = `const key = Symbol.for('vibe-visual-editor.locs');
-const locs = (globalThis[key] ??= new WeakMap());
+/**
+ * Page-global tables read by the client: wrapped elements' creation sites, and
+ * the file behind each module token used in \`data-vve-loc\` attributes.
+ */
+const RUNTIME_CODE = `const locs = (globalThis[Symbol.for('vibe-visual-editor.locs')] ??= new WeakMap());
+const files = (globalThis[Symbol.for('vibe-visual-editor.files')] ??= new Map());
 export function __le(el, loc) {
   if (typeof el === 'object' && el !== null) locs.set(el, loc);
   return el;
+}
+export function __leFile(token, file, rel) {
+  files.set(token, { file, rel });
 }
 `;
 
@@ -96,6 +103,13 @@ export function vibeVisualEditor(options: VibeVisualEditorOptions): Plugin {
   if (!options?.adapters?.length) throw new Error('Vibe Visual Editor: at least one adapter is required');
   let index: SourceIndex | undefined;
   let server: ViteDevServer | undefined;
+  /** Short per-module token for \`data-vve-loc\`, so attributes don't repeat file paths. */
+  const fileTokens = new Map<string, string>();
+  const tokenFor = (file: string): string => {
+    let token = fileTokens.get(file);
+    if (!token) fileTokens.set(file, (token = fileTokens.size.toString(36)));
+    return token;
+  };
 
   const handleApi = async (req: IncomingMessage, res: ServerResponse, route: string): Promise<void> => {
     const idx = index!;
@@ -153,6 +167,8 @@ export function vibeVisualEditor(options: VibeVisualEditorOptions): Plugin {
     },
 
     transform: {
+      // Before other pre-plugins, e.g. @vitejs/plugin-react with Babel: the index needs the original source.
+      order: 'pre',
       filter: { id: { include: /\.[cm]?[jt]sx?$/, exclude: [/[\\/]node_modules[\\/]/, /^\0/] } },
       handler(code, id) {
         const file = cleanId(id);
@@ -170,11 +186,24 @@ export function vibeVisualEditor(options: VibeVisualEditorOptions): Plugin {
         if (!analysis || analysis.creationSites.length === 0) return null;
 
         const s = new MagicString(code);
+        const token = tokenFor(file);
+        let wrapped = false;
+        let attributed = false;
         for (const site of analysis.creationSites) {
-          s.prependRight(site.start, '__le(');
-          s.appendLeft(site.end, `, ${JSON.stringify(site)})`);
+          if (site.attributeAt !== undefined) {
+            s.appendLeft(site.attributeAt, ` ${LOC_ATTRIBUTE}="${token}:${site.start}:${site.end}:${site.line}:${site.column}"`);
+            attributed = true;
+          } else {
+            s.prependRight(site.start, '__le(');
+            s.appendLeft(site.end, `, ${JSON.stringify(site)})`);
+            wrapped = true;
+          }
         }
-        s.prepend(`import { __le } from '${RUNTIME_ID}';\n`);
+        const names = [wrapped && '__le', attributed && '__leFile'].filter(Boolean).join(', ');
+        let header = `import { ${names} } from '${RUNTIME_ID}';`;
+        if (attributed) header += ` __leFile(${JSON.stringify(token)}, ${JSON.stringify(file)}, ${JSON.stringify(analysis.record.rel)});`;
+        if (analysis.headerAt === 0) s.prepend(`${header}\n`);
+        else s.appendLeft(analysis.headerAt, `\n${header}`);
         return { code: s.toString(), map: s.generateMap({ hires: 'boundary', source: file, includeContent: true }) };
       },
     },

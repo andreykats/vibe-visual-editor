@@ -13,7 +13,7 @@
         window.received.push(e.data);
         if (e.data && e.data.type === 'le:hello') frame.contentWindow.postMessage({ type: 'le:ack', v: e.data.v }, origin);
       });
-      window.toFrame = (msg) => frame.contentWindow.postMessage({ v: 1, ...msg }, origin);
+      window.toFrame = (msg) => frame.contentWindow.postMessage({ v: __VERSION__, ...msg }, origin);
       frame.src = target;
     </script>
   </body>

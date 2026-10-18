@@ -16,7 +16,7 @@ This document is the full brief. It records what the user decided, which facts w
 3. **Explicit save.** Committed edits become unsaved changes in the matching source files. The files show the usual dirty marker, and edits can be undone with Cmd+Z. Nothing reaches disk until the user presses the Save button in the preview toolbar or Cmd+S. A Discard button reverts only the preview's own edits.
 4. **Layout and formatting are read-only.** Only the characters of text that comes from a string literal can change. Tags, attributes, classes, styles, structure and rich text cannot be edited.
 5. **Select any element for the agent.** In *Select* mode, clicking any element (text or not) selects it. The agent can then read that selection through MCP when the user says things like "make the selected element red" or "move this button left". This works in both Claude Code and Codex.
-6. **Pluggable source tracing.** Mapping rendered text back to its source sits behind an adapter interface. v1 ships one adapter, for the `h()` element-builder pattern used by the first target app, a framework-free Vite app. A React/JSX adapter can be added later without changing the architecture.
+6. **Pluggable source tracing.** Mapping rendered text back to its source sits behind an adapter interface. v1 shipped one adapter, for the `h()` element-builder pattern used by the first target app, a framework-free Vite app. 0.2 adds a React/JSX adapter, which tags elements with a `data-vve-loc` attribute instead of wrapping them.
 
 ### Non-goals (v1)
 - Editing styles, layout, attributes, or structure. Requests for those go through the agent via selection.

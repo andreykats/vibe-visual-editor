@@ -22,9 +22,23 @@ export interface AdapterContext {
  * done by the plugin core; the adapter only says which expressions create
  * elements and how literals relate to them.
  */
+/** The attribute that carries a creation site into the DOM: `token:start:end:line:column`. */
+export const LOC_ATTRIBUTE = 'data-vve-loc';
+
+/**
+ * An expression that creates an element. By default the plugin wraps it as
+ * `__le(expr, loc)`, which records the DOM element it returns. Set
+ * `attributeAt` when the expression doesn't return the DOM element (JSX
+ * returns a React element): the plugin then inserts a `data-vve-loc`
+ * attribute at that offset, which the element carries into the DOM.
+ */
+export interface CreationSite extends Span {
+  attributeAt?: number;
+}
+
 export interface AdapterAnalysis {
-  /** Expressions that evaluate to a newly created element; each is tagged with its location. */
-  creationSites: Span[];
+  /** Expressions that create an element; each is tagged with its location. */
+  creationSites: CreationSite[];
   /** Literals inside these spans are not rendered text (tag names, attribute values) and are not indexed. */
   excluded: Span[];
   /** Literal start offset -> start offset of the creation site that takes it as a direct child. */

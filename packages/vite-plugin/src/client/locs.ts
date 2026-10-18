@@ -1,21 +1,40 @@
-import type { SourceLoc } from '@vibe-visual-editor/protocol';
+import { LOC_ATTRIBUTE, type SourceLoc } from '@vibe-visual-editor/protocol';
 
-const KEY = Symbol.for('vibe-visual-editor.locs');
-
-function map(): WeakMap<object, SourceLoc> {
-  const g = globalThis as unknown as Record<symbol, WeakMap<object, SourceLoc> | undefined>;
-  return (g[KEY] ??= new WeakMap());
+interface FileEntry {
+  file: string;
+  rel: string;
 }
 
-/** Creation site recorded by the plugin's `__le` wrapper. */
+/** A table shared with the plugin's runtime module through a global symbol. */
+function shared<T extends object>(name: string, make: () => T): T {
+  const g = globalThis as unknown as Record<symbol, T | undefined>;
+  return (g[Symbol.for(name)] ??= make());
+}
+
+/** Creation sites recorded by the plugin's `__le` wrapper. */
+const wrapped = () => shared('vibe-visual-editor.locs', () => new WeakMap<object, SourceLoc>());
+/** Module token -> file, registered by `__leFile` in each module that uses `data-vve-loc`. */
+const files = () => shared('vibe-visual-editor.files', () => new Map<string, FileEntry>());
+
+const ATTRIBUTE_VALUE = /^([0-9a-z]+):(\d+):(\d+):(\d+):(\d+)$/;
+
+/** The creation site in an element's `data-vve-loc` attribute (`token:start:end:line:column`). */
+function fromAttribute(el: Element): SourceLoc | undefined {
+  const match = ATTRIBUTE_VALUE.exec(el.getAttribute(LOC_ATTRIBUTE) ?? '');
+  const source = match && files().get(match[1]!);
+  if (!match || !source) return undefined;
+  return { ...source, start: Number(match[2]), end: Number(match[3]), line: Number(match[4]), column: Number(match[5]) };
+}
+
+/** The element's creation site, from the `__le` wrapper or its `data-vve-loc` attribute. */
 export function locOf(el: Element): SourceLoc | undefined {
-  return map().get(el);
+  return wrapped().get(el) ?? fromAttribute(el);
 }
 
 /** The element's own creation site, or the nearest tagged ancestor's. */
 export function nearestLoc(el: Element): { loc: SourceLoc; isAncestor: boolean } | undefined {
   for (let cur: Element | null = el; cur; cur = cur.parentElement) {
-    const loc = map().get(cur);
+    const loc = locOf(cur);
     if (loc) return { loc, isAncestor: cur !== el };
   }
   return undefined;

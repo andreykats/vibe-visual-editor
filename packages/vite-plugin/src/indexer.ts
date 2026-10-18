@@ -1,5 +1,5 @@
 import { parseSync } from 'oxc-parser';
-import type { AstNode, LiteralEntry, Quote, SourceAdapter, SourceLoc, Span } from '@vibe-visual-editor/protocol';
+import { cookJsxAttribute, cookJsxText, type AstNode, type LiteralEntry, type Quote, type SourceAdapter, type SourceLoc, type Span } from '@vibe-visual-editor/protocol';
 import { isNode, lineStarts, nameOf, positionAt, walk } from './ast';
 import { resolveImportBase, toRel } from './paths';
 
@@ -23,9 +23,16 @@ export interface ModuleRecord {
   imports: ImportBinding[];
 }
 
+export interface CreationSiteLoc extends SourceLoc {
+  /** Where to insert a `data-vve-loc` attribute instead of wrapping the expression. */
+  attributeAt?: number;
+}
+
 export interface ModuleAnalysis {
   record: ModuleRecord;
-  creationSites: SourceLoc[];
+  creationSites: CreationSiteLoc[];
+  /** Offset after the directive prologue (`'use client'` etc.), where injected imports go. */
+  headerAt: number;
 }
 
 export class ParseError extends Error {}
@@ -164,16 +171,36 @@ export function analyzeModule(file: string, code: string, root: string, adapter:
       }
     }
 
-    let value: string | undefined;
-    if (node.type === 'Literal' && typeof node.value === 'string') value = node.value;
-    else if (node.type === 'TemplateLiteral' && (node.expressions as unknown[]).length === 0) {
-      const cooked = ((node.quasis as AstNode[])[0]?.value as { cooked: string | null } | undefined)?.cooked;
-      if (typeof cooked === 'string') value = cooked;
-    }
-    if (value === undefined) return;
-    if (isNonValuePosition(node, parent, key) || within(facts.excluded, node.start)) return false;
+    const isString = node.type === 'Literal' && typeof node.value === 'string';
+    const isTemplate = node.type === 'TemplateLiteral' && (node.expressions as unknown[]).length === 0;
+    if (!isString && !isTemplate && node.type !== 'JSXText') return;
 
     const raw = code.slice(node.start, node.end);
+    let value: string | null | undefined;
+    let quote: Quote | undefined;
+    if (node.type === 'JSXText') {
+      value = cookJsxText(raw);
+      quote = 'jsx';
+      // Whitespace between tags renders as nothing.
+      if (value?.trim() === '') value = null;
+    } else if (isString) {
+      if (parent?.type === 'JSXAttribute') {
+        value = cookJsxAttribute(raw.slice(1, -1));
+        quote = 'jsx-attr';
+      } else {
+        value = node.value as string;
+        quote = raw[0] as Quote;
+      }
+    } else {
+      const cooked = ((node.quasis as AstNode[])[0]?.value as { cooked: string | null } | undefined)?.cooked;
+      if (typeof cooked === 'string') value = cooked;
+      quote = '`';
+    }
+    if (value === undefined) return;
+    // null: the source can't be mapped to its rendered text with certainty, so it isn't offered for editing.
+    if (value === null || quote === undefined) return false;
+    if (isNonValuePosition(node, parent, key) || within(facts.excluded, node.start)) return false;
+
     let binding: string | undefined;
     const grand = ancestors[ancestors.length - 2];
     if (parent?.type === 'VariableDeclarator' && key === 'init' && grand?.type === 'VariableDeclaration' && grand.kind === 'const') {
@@ -185,15 +212,25 @@ export function analyzeModule(file: string, code: string, root: string, adapter:
       ...loc(node),
       value,
       raw,
-      quote: raw[0] as Quote,
+      quote,
       ...(owner !== undefined ? { owner } : {}),
       ...(binding ? { binding } : {}),
     });
     return false;
   });
 
+  let headerAt = 0;
+  for (const stmt of program.body as AstNode[]) {
+    if (stmt.type !== 'ExpressionStatement' || typeof stmt.directive !== 'string') break;
+    headerAt = stmt.end;
+  }
+
   return {
     record: { file, rel, adapter, literals, refs, exportsByLocal, imports },
-    creationSites: facts.creationSites.map(loc),
+    creationSites: facts.creationSites.map((site) => ({
+      ...loc(site),
+      ...(site.attributeAt !== undefined ? { attributeAt: site.attributeAt } : {}),
+    })),
+    headerAt,
   };
 }

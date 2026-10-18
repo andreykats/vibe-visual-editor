@@ -3,10 +3,10 @@
 An adapter teaches the Vite plugin how one rendering style creates elements. The plugin core already does the generic work:
 
 - parsing with `oxc-parser`
-- indexing every string literal and substitution-free template literal, with exact UTF-16 offsets, raw text, cooked value and line/column
+- indexing every string literal, substitution-free template literal, JSX text and JSX attribute string, with exact UTF-16 offsets, raw text, cooked value and line/column
 - skipping literals that are syntax rather than values: import sources, object keys, TS literal types, directives, `require()` arguments, and tagged templates
 - counting how many places read a `const` literal, including across imports
-- wrapping creation sites with `__le(expr, loc)` and producing source maps
+- tagging creation sites, either by wrapping them as `__le(expr, loc)` or with a `data-vve-loc` attribute, and producing source maps
 - serving `/__vibe-visual-editor/resolve`
 
 The adapter supplies only facts that depend on the framework. The interface lives in `packages/protocol/src/adapter.ts`:
@@ -16,7 +16,7 @@ interface SourceAdapter {
   name: string;
   include(id: string, code: string): boolean;
   analyze(ctx: { id; code; root; program }): {
-    creationSites: Span[];         // expressions that evaluate to a new element
+    creationSites: CreationSite[]; // expressions that create an element (Span, plus attributeAt for attribute tagging)
     excluded: Span[];              // literals inside these aren't rendered text
     owners: Map<number, number>;   // literal start -> creation-site start that has it as a direct child
   };
@@ -32,16 +32,19 @@ The reference implementation is `packages/vite-plugin/src/adapters/h.ts`. It wor
 - **`analyze`** finds imports of the factory from the configured module, both named (aliases included) and namespace (`dom.h`). Every call to the factory is a creation site. The first argument (the tag) is excluded, and so is the second when it's an object literal (the attributes). String-literal children are owned by their call.
 - **`rank`** orders candidates: first a literal owned by the element's own call (rank 0), then any literal in the element's module (rank 1), then any literal elsewhere (rank 2). If several candidates share the best rank, the user picks one.
 
-## Sketch: a JSX adapter
+## The React adapter
 
-A JSX adapter needs no changes to the shared code:
+`packages/vite-plugin/src/adapters/react.ts` covers JSX. JSX differs from `h()` in two ways, and the core handles both:
 
-- **`include`**: `.tsx` / `.jsx`.
-- **`creationSites`**: each `JSXElement` span. Wrapping `<div>…</div>` as `__le(<div>…</div>, loc)` works for intrinsic elements that render to DOM. For components, tag the host element inside them instead, or skip them.
-- **Literals**: the core indexes `Literal` and `TemplateLiteral` nodes. JSX text (`<h2>Videos</h2>`) is a `JSXText` node, so a JSX adapter needs core support for an extra literal kind, with its own escaping rules (`{`, `}`, `<`, `>`, and how whitespace is trimmed). The protocol's `Quote` type and `escapeLiteral` are the places to extend.
-- **`excluded`**: attribute values (`className="x"`), unless they're rendered as children.
-- **`owners`**: JSX text and `{"literal"}` children map to the start of their enclosing element.
+- **Tagging.** `<div>` evaluates to a React element, not a DOM node, so the `__le` wrapper can't record which DOM element it becomes. A creation site can instead set `attributeAt`, and the core inserts `data-vve-loc="token:start:end:line:column"` there. The element carries the attribute into the DOM, including through server rendering. Each module registers its file path once under the short token, so the attribute never repeats paths.
+- **Literal kinds.** JSX text (`<h2>Videos</h2>`) and JSX attribute strings (`title="Hi"`) aren't JS strings. The protocol has two more literal kinds, `jsx` and `jsx-attr`. `cookJsxText` and `cookJsxAttribute` turn source into the rendered string, and `literalRaw` writes a value back. Cooking follows oxc's JSX transform, which is what Vite uses, and a conformance test compares the two. Where JSX compilers disagree, cooking returns `null` and the text isn't offered.
+
+The adapter itself:
+
+- **`include`**: script files outside `node_modules`, so constants in `.ts` files are indexed too.
+- **`analyze`**: every lowercase JSX element (`<div>`, `<my-element>`) is a creation site, tagged after its name. Its attribute values are excluded, and its JSX text and string children are owned by it. Components aren't tagged, since they render their own elements. Their string props stay indexed, because props like `title` are often rendered as text, except props that never are (`key`, `className`, `style`, `id`, `href`, `src`, `type`, `role`, `htmlFor`, `data-*`, `aria-*`).
+- **`rank`**: the same ownership rule as `h()`.
 
 ## Testing an adapter
 
-Add cases to `packages/vite-plugin/test/indexer.test.ts` that build a `SourceIndex` with your adapter and assert on `analyzeDetached` and `resolve`. Also add a fixture app under `fixtures/`, and extend `packages/vite-plugin/test/plugin.test.ts` to check that the transform output still runs and has source maps.
+Add cases that build a `SourceIndex` with your adapter and assert on `analyzeDetached` and `resolve` (see `packages/vite-plugin/test/indexer.test.ts` and `jsx.test.ts`). Also add a fixture app under `fixtures/` with a plugin integration test (`plugin.test.ts`, `react.test.ts`) and page tests in `tests/page/`.

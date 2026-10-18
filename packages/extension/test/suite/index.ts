@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import * as vscode from 'vscode';
-import type { Candidate, ResolveResponse, WindowEntry } from '@vibe-visual-editor/protocol';
+import { PROTOCOL_VERSION, type Candidate, type ResolveResponse, type WindowEntry } from '@vibe-visual-editor/protocol';
 import type { VibeVisualEditorApi } from '../../src/extension';
 import type { PreviewPanel } from '../../src/previewPanel';
 
@@ -153,6 +153,28 @@ test('a line break is written as an escaped \\n', async () => {
   await revert(rel);
 });
 
+test('JSX text and attributes are written back in JSX syntax', async () => {
+  // A React file in the h() workspace: the edit service only needs the candidate and the document.
+  const rel = 'src/Hello.tsx';
+  const source = `export const Hello = () => (\n  <p title="Old title">\n    Tom &amp; Jerry\n  </p>\n);\n`;
+  writeFileSync(file(rel), source);
+  try {
+    const candidate = (raw: string, value: string, quote: Candidate['quote']): Candidate => {
+      const start = source.indexOf(raw);
+      return { id: `${file(rel)}:${start}`, file: file(rel), rel, line: 1, column: 1, start, end: start + raw.length, value, raw, quote, ordinal: 0, sameValueCount: 1, uses: 1 };
+    };
+    await panel.edits.edit(candidate('\n    Tom &amp; Jerry\n  ', 'Tom & Jerry', 'jsx'), 'Tom & {Jerry} <3');
+    await panel.edits.edit(candidate('"Old title"', 'Old title', 'jsx-attr'), 'Say "hi"');
+    const d = await doc(rel);
+    assert.equal(d.getText(), `export const Hello = () => (\n  <p title='Say "hi"'>\n    Tom & &#123;Jerry&#125; &lt;3\n  </p>\n);\n`);
+    await panel.discard();
+    assert.equal(d.getText(), source);
+  } finally {
+    await revert(rel);
+    rmSync(file(rel), { force: true });
+  }
+});
+
 test('discard restores exactly; undo and redo step through edits', async () => {
   const rel = 'src/views/settings.ts';
   const original = disk(rel);
@@ -229,12 +251,12 @@ test('an edited range changed by someone else is dropped, and stale literals are
 test('page messages: le:edit applies through the panel, le:select reaches the store', async () => {
   const c = await resolve('Back');
   const onFrame = (panel as unknown as { onFrameMessage(d: unknown): Promise<void> }).onFrameMessage.bind(panel);
-  await onFrame({ type: 'le:edit', v: 1, requestId: 7, candidates: [c], newValue: 'Return' });
+  await onFrame({ type: 'le:edit', v: PROTOCOL_VERSION, requestId: 7, candidates: [c], newValue: 'Return' });
   assert.equal(panel.edits.pendingCount, 1);
   await panel.discard();
   await revert('src/views/settings.ts');
 
-  await onFrame({ type: 'le:edit', v: 1, requestId: 8, candidates: [], newValue: 'x' }); // invalid: ignored
+  await onFrame({ type: 'le:edit', v: PROTOCOL_VERSION, requestId: 8, candidates: [], newValue: 'x' }); // invalid: ignored
   assert.equal(panel.edits.pendingCount, 0);
 
   const descriptor = {
@@ -242,7 +264,7 @@ test('page messages: le:edit applies through the panel, le:select reaches the st
     boundingRect: { x: 0, y: 0, width: 1, height: 1 }, styles: {}, creationSiteIsAncestor: false,
     pageUrl: DEV_URL, route: '', timestamp: 1,
   };
-  await onFrame({ type: 'le:select', v: 1, descriptor });
+  await onFrame({ type: 'le:select', v: PROTOCOL_VERSION, descriptor });
   assert.equal(api.selection.get()?.descriptor.tag, 'h2');
   await onFrame({ type: 'le:hello', v: 99, url: DEV_URL, title: '' });
   assert.equal(panel.status, 'protocol-mismatch');

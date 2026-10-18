@@ -24,10 +24,13 @@ export const flatten = (s: string) => s.replace(/[\r\n]+/g, ' ');
 const toLf = (s: string) => s.replace(/\r\n?/g, '\n');
 
 /**
- * Plain-text editor for one text node. The node is wrapped in a temporary
- * `contenteditable="plaintext-only"` span (never the parent, so structure
- * can't be edited) and unwrapped again when the edit ends. Shift+Enter adds
- * a line break as a `\n` character, never a `<br>`.
+ * Plain-text editor for one text node. A temporary
+ * `contenteditable="plaintext-only"` span holding the text is inserted just
+ * before the node (never the parent, so structure can't be edited), and the
+ * node is emptied while the edit is open. The node itself never moves, so a
+ * framework that owns it (React keeps references to its text nodes) can still
+ * update, remove or insert around it. Shift+Enter adds a line break as a `\n`
+ * character, never a `<br>`.
  */
 export class InlineEditor implements TextEditor {
   readonly span: HTMLSpanElement;
@@ -46,8 +49,9 @@ export class InlineEditor implements TextEditor {
     span.style.cssText =
       'outline:2px solid #3b82f6;outline-offset:2px;border-radius:2px;cursor:text;white-space:pre-wrap;min-width:1ch;display:inline-block;';
     if (options.warning) span.title = options.warning;
-    text.replaceWith(span);
-    span.appendChild(text);
+    span.textContent = text.data;
+    text.before(span);
+    text.data = '';
 
     span.addEventListener('beforeinput', this.onBeforeInput);
     span.addEventListener('input', this.onInput);
@@ -84,8 +88,7 @@ export class InlineEditor implements TextEditor {
     this.span.removeEventListener('blur', this.onBlur);
     const value = toLf(this.span.textContent ?? '');
     this.text.data = commit ? value : this.original;
-    if (this.span.isConnected) this.span.replaceWith(this.text);
-    else this.span.replaceChildren();
+    this.span.remove();
     if (commit && value !== this.original) this.options.onCommit(value);
     else this.options.onCancel();
   }

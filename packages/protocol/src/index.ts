@@ -1,7 +1,9 @@
 export * from './version';
 export * from './types';
 export * from './escape';
+export * from './jsx';
 export * from './urls';
 export * from './markdown';
 export * from './messages';
-export type { SourceAdapter, AdapterContext, AdapterAnalysis, RankedCandidate, AstNode } from './adapter';
+export type { SourceAdapter, AdapterContext, AdapterAnalysis, CreationSite, RankedCandidate, AstNode } from './adapter';
+export { LOC_ATTRIBUTE } from './adapter';

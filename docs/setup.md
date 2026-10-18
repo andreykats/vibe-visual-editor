@@ -2,7 +2,7 @@
 
 Vibe Visual Editor shows your running Vite app in a VS Code tab. In the preview you can retype text and save the change to the source file, or select an element so Claude Code or Codex can work on it.
 
-It has three parts:
+It works with React (JSX) apps and with apps that build their DOM with an `h()` helper. It has three parts:
 
 - **The VS Code extension** (`andreykats.vibe-visual-editor`), which provides the preview tab, saving, and the agent bridge.
 - **The Vite plugin** (`@vibe-visual-editor/vite-plugin`), which runs only in your app's dev server. It maps rendered text back to source.
@@ -26,7 +26,22 @@ npm install -D @vibe-visual-editor/vite-plugin
 
 To try an unreleased build, run `npm run build -w @vibe-visual-editor/vite-plugin && (cd packages/vite-plugin && npm pack)` in this repo and install the resulting `.tgz` with `npm install -D <path>`.
 
-Then add it to `vite.config.ts`. Point `from` at the module that exports your element factory:
+Then add it to `vite.config.ts` with the adapter for how your app builds its DOM.
+
+**React** (and other JSX libraries that render lowercase tags as DOM elements):
+
+```ts
+import react from '@vitejs/plugin-react';
+import vibeVisualEditor, { reactAdapter } from '@vibe-visual-editor/vite-plugin';
+
+export default defineConfig({
+  plugins: [react(), vibeVisualEditor({ adapters: [reactAdapter()] })],
+});
+```
+
+The plugin order doesn't matter: Vibe Visual Editor reads your source before `react()` compiles the JSX.
+
+**An `h(tag, attrs, ...children)` helper:** point `from` at the module that exports it.
 
 ```ts
 import vibeVisualEditor, { hAdapter } from '@vibe-visual-editor/vite-plugin';
@@ -75,7 +90,14 @@ Start a new agent session afterwards so it picks up the server.
 
 ## What can be edited
 
-Only the characters of a string literal that's rendered as text can be edited. That covers `'…'`, `"…"`, and template literals without `${}`, including the text of dropdown options. Tags, attributes, classes, styles and structure can't be edited, and neither can text built at runtime. For those, select the element and ask the agent.
+Only text that comes straight from your source can be edited:
+
+- string literals (`'…'`, `"…"`, and template literals without `${}`), including dropdown option text
+- in React: text between tags (`<h1>Welcome</h1>`) and string props that a component renders as text (`<Card title="Settings" />`)
+
+Edits are written back in the same syntax. In JSX, characters like `{` or `<` become entities (`&#123;`, `&lt;`), and text that JSX can't hold, such as a line break, becomes `{'…'}`. Tags, attributes of HTML elements, classes, styles and structure can't be edited, and neither can text built at runtime. For those, select the element and ask the agent.
+
+A few JSX texts are skipped because JSX compilers render them differently, so there's no single right answer: tabs inside the text, and character references that encode whitespace or aren't common named entities.
 
 When the same text appears in several equally likely places, Vibe Visual Editor asks which one you meant. If the literal is a shared constant, the editor warns "Used in N places" because changing it changes every use.
 

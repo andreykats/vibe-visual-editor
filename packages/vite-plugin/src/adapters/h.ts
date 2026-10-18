@@ -1,7 +1,8 @@
 import path from 'node:path';
-import type { AstNode, RankedCandidate, SourceAdapter, Span } from '@vibe-visual-editor/protocol';
+import type { AstNode, SourceAdapter, Span } from '@vibe-visual-editor/protocol';
 import { isNode, nameOf, walk } from '../ast';
 import { resolveImportBase, stripScriptExt } from '../paths';
+import { rankByOwner } from './rank';
 
 export interface HAdapterOptions {
   /** Exported name of the element factory, e.g. `h`. */
@@ -67,14 +68,6 @@ export function hAdapter(options: HAdapterOptions): SourceAdapter {
       return { creationSites, excluded, owners };
     },
 
-    rank(candidates, { elementLoc }) {
-      return candidates.map((candidate): RankedCandidate => {
-        let rank = 2;
-        if (elementLoc && candidate.file === elementLoc.file) {
-          rank = candidate.owner === elementLoc.start ? 0 : 1;
-        }
-        return { candidate, rank };
-      });
-    },
+    rank: rankByOwner,
   };
 }

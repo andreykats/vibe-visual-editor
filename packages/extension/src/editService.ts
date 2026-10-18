@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { AnalyzeResponseSchema, escapeLiteral, type Candidate, type PendingEdit } from '@vibe-visual-editor/protocol';
+import { AnalyzeResponseSchema, literalRaw, type Candidate, type PendingEdit, type Quote } from '@vibe-visual-editor/protocol';
 import { EditLedger, isActive, type LedgerEntry, type Op } from './editLedger';
 
 export class EditError extends Error {}
@@ -52,7 +52,7 @@ export class EditService implements vscode.Disposable {
     const uri = vscode.Uri.file(candidate.file);
     if (!vscode.workspace.getWorkspaceFolder(uri)) throw new EditError(`${candidate.rel} is outside the workspace folders.`);
     const { quote, raw } = candidate;
-    if (raw.length < 2 || raw[0] !== quote || raw[raw.length - 1] !== quote) throw new EditError('Not a string literal.');
+    if (!looksLike(raw, quote)) throw new EditError('Not a text literal.');
     const doc = await vscode.workspace.openTextDocument(uri);
 
     let entry = this.ledger.get(candidate.id);
@@ -81,7 +81,7 @@ export class EditService implements vscode.Disposable {
     }
 
     // Going back to the original value restores the original source text exactly.
-    const newRaw = newValue === entry.originalValue ? entry.originalRaw : escapeLiteral(newValue, quote);
+    const newRaw = newValue === entry.originalValue ? entry.originalRaw : literalRaw(newValue, quote, entry.originalRaw);
     if (newRaw === entry.currentRaw) return;
     if (newRaw !== entry.originalRaw) entry.values.set(newRaw, newValue);
     const from = entry.currentRaw;
@@ -214,6 +214,13 @@ export class EditService implements vscode.Disposable {
   private forgetFile(file: string): void {
     if (this.ledger.remove((e) => e.file === file).length > 0) this.changed.fire();
   }
+}
+
+/** Whether `raw` is shaped like a literal of kind `quote`: quoted strings, or non-empty JSX text. */
+function looksLike(raw: string, quote: Quote): boolean {
+  if (quote === 'jsx') return raw.length > 0;
+  const quotes = quote === 'jsx-attr' ? ['"', "'"] : [quote];
+  return raw.length >= 2 && quotes.includes(raw[0]!) && raw[raw.length - 1] === raw[0];
 }
 
 function rangeOf(doc: vscode.TextDocument, entry: { start: number; end: number }): vscode.Range {

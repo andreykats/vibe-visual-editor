@@ -19,10 +19,10 @@ export function escapeLiteral(value: string, quote: Quote): string {
       case '\r':
         out += '\\r';
         break;
-      case ' ':
+      case '\u2028':
         out += '\\u2028';
         break;
-      case ' ':
+      case '\u2029':
         out += '\\u2029';
         break;
       default:

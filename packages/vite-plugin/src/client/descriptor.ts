@@ -1,4 +1,4 @@
-import type { ElementDescriptor } from '@vibe-visual-editor/protocol';
+import { LOC_ATTRIBUTE, type ElementDescriptor } from '@vibe-visual-editor/protocol';
 import { nearestLoc } from './locs';
 
 const LABEL_ATTRS = ['role', 'aria-label', 'aria-labelledby', 'aria-describedby', 'aria-expanded', 'aria-pressed', 'aria-checked', 'title', 'alt', 'name', 'type'];
@@ -11,6 +11,9 @@ const STYLE_PROPS = [
 ];
 /** Values that say nothing useful; omitted to keep the descriptor small. */
 const UNINTERESTING = new Set(['', 'none', 'normal', 'auto', '0px', 'static', 'rgba(0, 0, 0, 0)', '0px none rgb(0, 0, 0)', '1', 'start']);
+
+/** The page's markup without Vibe Visual Editor's own attributes, which only add noise for the agent. */
+const OWN_ATTRIBUTES = new RegExp(` ${LOC_ATTRIBUTE}="[^"]*"`, 'g');
 
 function clip(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
@@ -75,7 +78,7 @@ export function describeElement(el: Element, editableText?: ElementDescriptor['e
     attributes,
     textContent: clip((el.textContent ?? '').replace(/\s+/g, ' ').trim(), 300),
     selector: uniqueSelector(el),
-    outerHTML: clip(el.outerHTML, 2048),
+    outerHTML: clip(el.outerHTML.replace(OWN_ATTRIBUTES, ''), 2048),
     boundingRect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
     styles,
     ...(site ? { creationSite: site.loc } : {}),

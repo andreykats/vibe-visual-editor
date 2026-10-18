@@ -13,7 +13,7 @@ npm run test:e2e       # Playwright: page client in a framed harness
 npm run test:extension # VS Code integration tests
 ```
 
-The page and extension tests assert the text in `fixtures/h-app` (for example "Welcome home", "Videos", "Shared label"). Don't commit edits made to the fixture while trying out the preview. If the user's own uncommitted edits break the tests, ask what to do with them.
+The page and extension tests assert the text in `fixtures/h-app` and `fixtures/react-app` (for example "Welcome home", "Videos", "Welcome to React"). Don't commit edits made to the fixture while trying out the preview. If the user's own uncommitted edits break the tests, ask what to do with them.
 
 ## Git
 
@@ -30,12 +30,13 @@ Releases are tag-triggered. See [docs/releasing.md](docs/releasing.md).
 - Bump `version` in the package's `package.json`. An extension release also needs a `## X.Y.Z` section in `packages/extension/CHANGELOG.md`.
 - Commit, push, wait for CI, then push the tag `extension-vX.Y.Z` or `vite-plugin-vX.Y.Z`. `release.yml` publishes through trusted publishing.
 - Don't publish by hand, and don't tag a release, unless the user asks. Published versions can never be reused.
-- `PROTOCOL_VERSION` (`packages/protocol/src/version.ts`) changes need both packages released together.
+- `PROTOCOL_VERSION` (`packages/protocol/src/version.ts`) changes need both packages released together. Tests and the page-test harness read it, so don't hard-code version numbers.
 
 ## Things that aren't obvious
 
 - `@vibe-visual-editor/protocol` and `mcp-bridge` are private. The protocol is inlined into the plugin's JS and into its bundled `dist/index.d.ts`, which `tsconfig.vite-plugin-dts.json` builds. That tsconfig must stay at the repo root. Inside the monorepo, the `vibe-visual-editor:source` export condition points tools at the TypeScript source. `test/package.test.ts` type-checks the packed tarball in a strict app.
-- The fixture depends on the plugin as `"*"`. With a fixed version, npm would install a published copy instead of linking the workspace whenever the versions differ.
+- The fixtures depend on the plugin as `"*"`. With a fixed version, npm would install a published copy instead of linking the workspace whenever the versions differ.
 - Changes to the extension reach the user's VS Code only after `npm run package`, `code --install-extension packages/extension/vibe-visual-editor.vsix --force`, and **Developer: Reload Window**.
+- JSX text and JSX attribute strings are literal kinds of their own (`jsx`, `jsx-attr`). Their rules live in `packages/protocol/src/jsx.ts`, and `packages/vite-plugin/test/jsx.test.ts` checks them against Vite's own JSX compiler. Keep that test passing whenever the rules change.
 - Only string-literal text is editable. Don't add features that rewrite tags, attributes or structure. Those go through the agent and the selection instead.
 - Git commands for different repositories must not run as parallel tool calls: they share one shell and its working directory.

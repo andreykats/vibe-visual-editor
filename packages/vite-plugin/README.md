@@ -14,9 +14,22 @@ Then install the [Vibe Visual Editor extension](https://marketplace.visualstudio
 
 ## Usage
 
+**React:**
+
 ```ts
 // vite.config.ts
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import vibeVisualEditor, { reactAdapter } from '@vibe-visual-editor/vite-plugin';
+
+export default defineConfig({
+  plugins: [react(), vibeVisualEditor({ adapters: [reactAdapter()] })],
+});
+```
+
+**An `h()` element helper:**
+
+```ts
 import vibeVisualEditor, { hAdapter } from '@vibe-visual-editor/vite-plugin';
 
 export default defineConfig({
@@ -28,15 +41,17 @@ Add `.vibe-visual-editor/` to your `.gitignore`. While the dev server runs, the 
 
 ### Adapters
 
-An adapter tells the plugin how your app creates elements. v0.1 ships one:
+An adapter tells the plugin how your app creates elements:
 
+- **`reactAdapter()`** for JSX: React, and other libraries that render lowercase JSX tags as DOM elements. Text between tags and string props that components render (`<Card title="Settings" />`) are editable, and selected elements point at their JSX line. In dev, each HTML element gets a `data-vve-loc` attribute. Production builds don't have it.
 - **`hAdapter({ factory, from })`** for apps that build their DOM with an `h(tag, attrs, ...children)` helper. `factory` is the helper's exported name, and `from` is the root-relative path of the module that exports it.
 
-Support for JSX frameworks is planned. [Writing a source adapter](https://github.com/andreykats/vibe-visual-editor/blob/main/docs/adapters.md) describes the interface (`SourceAdapter`, which this package exports as a type).
+[Writing a source adapter](https://github.com/andreykats/vibe-visual-editor/blob/main/docs/adapters.md) describes the interface (`SourceAdapter`, which this package exports as a type).
 
 ## Requirements
 
 - Vite 7 or later.
+- The Vibe Visual Editor extension 0.2 or later. Plugin 0.2 and extension 0.2 speak protocol version 2.
 - Node.js 20.19+ or 22.12+, as Vite requires.
 
 ## License

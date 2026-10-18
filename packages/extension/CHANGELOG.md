@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0 (preview)
+
+- **React support.** With the plugin's new `reactAdapter()`, you can edit text between JSX tags and string props that components render (`<Card title="Settings" />`), and selected elements point at their JSX line. Edits are written back in JSX syntax.
+- The inline editor no longer moves the text node it edits, so frameworks that own the DOM, like React, keep working while you type.
+- Protocol version 2: use `@vibe-visual-editor/vite-plugin` 0.2 or later. An older plugin shows "plugin version mismatch".
+
 ## 0.1.0 (preview)
 
 First public preview.
